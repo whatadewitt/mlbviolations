@@ -1,6 +1,8 @@
-package main
+package internal
 
-import "time"
+import (
+	"time"
+)
 
 type ScheduleData struct {
 	Copyright            string  `json:"copyright"`
@@ -14,16 +16,12 @@ type ScheduleData struct {
 }
 
 type GameData struct {
-	Copyright        string   `json:"copyright"`
-	GamePk           int      `json:"gamePk"`
-	Link             string   `json:"link"`
-	MetaData         MetaData `json:"metaData"`
-	GameData         Game     `json:"gameData"`
-	LiveData         LiveData `json:"liveData"`
-	ViolationsTotal  int      `json:"violationsTotal,omitEmpty"`
-	LastPlayIdx      int      `json:"lastPlayIdx,omitEmpty"`
-	LastPlayEventIdx int      `json:"lastPlayEventIdx,omitEmpty"`
-	DelayInSeconds   int      `json:"delayInSeconds,omitEmpty"`
+	Copyright string   `json:"copyright"`
+	GamePk    int      `json:"gamePk"`
+	Link      string   `json:"link"`
+	MetaData  MetaData `json:"metaData"`
+	GameData  Game     `json:"gameData"`
+	LiveData  LiveData `json:"liveData"`
 }
 
 type Game struct {
@@ -941,19 +939,4 @@ type Runners struct {
 	Movement Movement  `json:"movement"`
 	Details  Details   `json:"details"`
 	Credits  []Credits `json:"credits"`
-}
-
-type GameCache struct {
-	Status      string   `json:"status"`
-	PitchedKeys []string `json:"pitched"`
-}
-
-type CloserNews struct {
-	Tweet          string
-	Game           ScheduleGame
-	DelayInSeconds int
-}
-
-type ViolationNotification struct {
-	Tweet string
 }
