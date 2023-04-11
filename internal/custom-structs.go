@@ -48,7 +48,7 @@ func (t *TrackedGame) GetViolations() []string {
 
 	notifications := []string{}
 
-	// fmt.Printf("start @ %d %d\n\n", lastPlayIdx, lastPlayEventIdx)
+	fmt.Printf("start @ %d %d\n\n", lastPlayIdx, lastPlayEventIdx)
 
 	for pIdx, v := range t.Game.LiveData.Plays.AllPlays {
 		if lastPlayIdx > 0 && int(lastPlayIdx) > pIdx {
@@ -79,7 +79,7 @@ func (t *TrackedGame) GetViolations() []string {
 		t.LastPlayIdx = int32(pIdx)
 
 	}
-	fmt.Printf("Setting Last Played to: %v-%v", t.LastPlayIdx, t.LastPlayEventIdx)
+	fmt.Printf("Setting Last Played to: %d-%d", t.LastPlayIdx, t.LastPlayEventIdx)
 
 	// fmt.Printf("L: %d\n", t.LastPlayIdx)
 	return notifications
