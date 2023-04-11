@@ -57,7 +57,7 @@ func (t *TrackedGame) GetViolations() []string {
 		fmt.Printf("i: %d\n", pIdx)
 
 		for eIdx, p := range v.PlayEvents {
-			if pIdx == int(lastPlayIdx) && int(lastPlayEventIdx) > eIdx {
+			if pIdx == int(lastPlayIdx) && int(lastPlayEventIdx) >= eIdx {
 				// in case its the same plate appearance we don't want to accidentally
 				// send multiple tweets of the same thing
 				continue
