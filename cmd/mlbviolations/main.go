@@ -22,7 +22,7 @@ func tweet(s string) ([]byte, error) {
 	fmt.Printf("\n\nTWEETING:\n%v\n", s)
 	// return nil, nil
 	config := oauth1.NewConfig(os.Getenv("TWITTER_API_KEY"), os.Getenv("TWITTER_API_SECRET"))
-	token := oauth1.NewToken(os.Getenv("TWITTER_CLIENT_KEY"), os.Getenv("TWITTER_CLIENT_SECRET"))
+	token := oauth1.NewToken(os.Getenv("TWITTER_ACCESS_TOKEN"), os.Getenv("TWITTER_ACCESS_TOKEN_SECRET"))
 	httpClient := config.Client(oauth1.NoContext, token)
 
 	twitterUrl := "https://api.twitter.com/2/tweets"
