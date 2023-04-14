@@ -29,7 +29,7 @@ type TrackedGame struct {
 
 type Tweet struct {
 	MainTweet  string
-	ReplyTweet *string
+	ReplyTweet string
 }
 
 type TweetResponse struct {
@@ -66,13 +66,13 @@ func (t *TrackedGame) GetViolations(db *sql.DB) [][2]string {
 
 	notifications := [][2]string{}
 
-	fmt.Printf("start @ %d %d\n\n", lastPlayIdx, lastPlayEventIdx)
+	// fmt.Printf("start @ %d %d\n\n", lastPlayIdx, lastPlayEventIdx)
 
 	for pIdx, v := range t.Game.LiveData.Plays.AllPlays {
 		if lastPlayIdx > 0 && int(lastPlayIdx) > pIdx {
 			continue
 		}
-		fmt.Printf("i: %d\n", pIdx)
+		// fmt.Printf("i: %d\n", pIdx)
 
 		for eIdx, p := range v.PlayEvents {
 			if pIdx == int(lastPlayIdx) && int(lastPlayEventIdx) >= eIdx {
@@ -80,7 +80,7 @@ func (t *TrackedGame) GetViolations(db *sql.DB) [][2]string {
 				// send multiple tweets of the same thing
 				continue
 			}
-			fmt.Printf("ie: %d-%d\n", pIdx, eIdx)
+			// fmt.Printf("ie: %d-%d\n", pIdx, eIdx)
 
 			switch p.Details.Call.Code {
 			case "AC":

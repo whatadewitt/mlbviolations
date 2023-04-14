@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dghubble/oauth1"
 	"github.com/joho/godotenv"
 	"github.com/whatadewitt/mlbviolations/internal"
 )
@@ -25,11 +27,11 @@ func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
 		fmt.Printf("\n\nTWEETING:\n%s\n", v.ReplyTweet)
 	}
 
-	// config := oauth1.NewConfig(os.Getenv("TWITTER_API_KEY"), os.Getenv("TWITTER_API_SECRET"))
-	// token := oauth1.NewToken(os.Getenv("TWITTER_CLIENT_KEY"), os.Getenv("TWITTER_CLIENT_SECRET"))
-	// httpClient := config.Client(oauth1.NoContext, token)
+	config := oauth1.NewConfig(os.Getenv("TWITTER_API_KEY"), os.Getenv("TWITTER_API_SECRET"))
+	token := oauth1.NewToken(os.Getenv("TWITTER_ACCESS_TOKEN"), os.Getenv("TWITTER_ACCESS_TOKEN_SECRET"))
+	httpClient := config.Client(oauth1.NoContext, token)
 
-	// twitterUrl := "https://api.twitter.com/2/tweets"
+	twitterUrl := "https://api.twitter.com/2/tweets"
 
 	var payload *strings.Reader
 	if reply_id == "" {
@@ -40,36 +42,36 @@ func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
 		payload = strings.NewReader(fmt.Sprintf(`{ "text": "%s", "reply": { "in_reply_to_tweet_id": "%s" } }`, v.ReplyTweet, reply_id))
 	}
 
-	// res, err := httpClient.Post(twitterUrl, "application/json", payload)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return nil, err
-	// }
-	// defer res.Body.Close()
+	res, err := httpClient.Post(twitterUrl, "application/json", payload)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	defer res.Body.Close()
 
-	// body, err := ioutil.ReadAll(res.Body)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return nil, err
-	// }
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
 
 	fmt.Println("payload %v", payload)
 
 	randy := rand.Float32()
-	if v.ReplyTweet != nil && randy <= .25 && reply_id == "" {
+	if v.ReplyTweet != "" && randy <= .25 && reply_id == "" {
 		// send a reply with additional data 25% of the time
 		// but not to the replies...
 		fmt.Println("I'm sending a response!")
 
-		// var tweetResp internal.TweetResponse
-		// err = json.Unmarshal(body, &tweetResp)
+		var tweetResp internal.TweetResponse
+		err = json.Unmarshal(body, &tweetResp)
 
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	return nil, err
-		// }
+		if err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
 
-		return tweet(v, "12345")
+		return tweet(v, tweetResp.Data.Id)
 	} else {
 		return nil, nil // body, nil
 	}
