@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dghubble/oauth1"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 	"github.com/whatadewitt/mlbviolations/internal"
 )
@@ -25,6 +26,11 @@ func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
 		fmt.Printf("\n\nTWEETING:\n%s\n", v.MainTweet)
 	} else {
 		fmt.Printf("\n\nTWEETING:\n%s\n", v.ReplyTweet)
+	}
+
+	if os.Getenv("TWITTER_API_KEY") == "" {
+		fmt.Printf("\n\nTWEETING:\n%s\n", v.ReplyTweet)
+		return nil, nil
 	}
 
 	config := oauth1.NewConfig(os.Getenv("TWITTER_API_KEY"), os.Getenv("TWITTER_API_SECRET"))
@@ -104,7 +110,7 @@ func main() {
 	godotenv.Load()
 
 	db, err := sql.Open("mysql",
-		fmt.Sprintf("%v:%v@tcp(%v:%v)/%v", os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_TABLE")))
+		fmt.Sprintf("%v:%v@tcp(%v:%v)/%v", os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_DATABASE")))
 
 	if err != nil {
 		log.Fatal(err)
@@ -113,21 +119,29 @@ func main() {
 	defer db.Close()
 
 	gameDay := time.Now()
-	gameDay = gameDay.AddDate(0, 0, -3)
-	trackedGames, err := parseScoreboardData(gameDay)
-	if err != nil {
-		fmt.Printf("Error getting games for day %v", gameDay.Format("Mon Jan 02 2006"))
-		log.Fatal(err)
+	// gameDay = gameDay.AddDate(0, 0, -1)
+
+	var trackedGames []*internal.TrackedGame
+	for {
+		trackedGames, err = parseScoreboardData(gameDay)
+		if err != nil {
+			fmt.Printf("Error getting games for day %v", gameDay.Format("Mon Jan 02 2006"))
+			fmt.Println("\ntrying again in 5 seconds...")
+			time.Sleep(5 * time.Second)
+		} else {
+			break
+		}
 	}
 
 	games := make([]*internal.TrackedGame, 0)
 	upcomingGames := make([]*internal.TrackedGame, 0)
 
 	for _, game := range trackedGames {
-		// if (game.Status.AbstractGameCode == "F" && game.Status.DetailedState == "Postponed") {
-		// F here to handle games that have finished
-		// (or been delayed today) -- figure it out
-		if game.GameDate.Before(time.Now()) {
+		if game.Status.AbstractGameCode == "F" && game.Status.DetailedState == "Postponed" {
+			// F here to handle games that have finished
+			// (or been delayed today) -- figure it out
+			// we basically just skip here for now
+		} else if game.GameDate.Before(time.Now()) {
 			// game has started
 			games = append(games, game)
 		} else {
@@ -179,9 +193,15 @@ func main() {
 
 		fmt.Printf("left to count... %d", gameCount)
 		if gameCount == 0 {
-			seasonTotal := getViolationCount(db)
+			seasonTotal, err := getViolationCount(db)
+
+			if err != nil {
+				fmt.Println("Error getting violation count.")
+				log.Fatal(err)
+			}
+
 			var signOffTweet internal.Tweet
-			signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total:`, total, seasonTotal)
+			signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d`, total, seasonTotal)
 			tweet(signOffTweet, "")
 			os.Exit(3)
 		}
@@ -199,13 +219,13 @@ func main() {
 	}
 }
 
-func getViolationCount(db *sql.DB) int {
+func getViolationCount(db *sql.DB) (int, error) {
 	var seasonTotal int
 	err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats")).Scan(&seasonTotal)
 
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 
-	return seasonTotal
+	return seasonTotal, nil
 }

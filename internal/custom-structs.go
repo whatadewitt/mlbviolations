@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 )
@@ -59,12 +60,12 @@ func (t *TrackedGame) Refresh() {
 	}
 }
 
-func (t *TrackedGame) GetViolations(db *sql.DB) [][2]string {
+func (t *TrackedGame) GetViolations(db *sql.DB) []Tweet {
 	// Request the data, and return just the violations.
 	lastPlayIdx := t.LastPlayIdx
 	lastPlayEventIdx := t.LastPlayEventIdx
 
-	notifications := [][2]string{}
+	notifications := []Tweet{}
 
 	// fmt.Printf("start @ %d %d\n\n", lastPlayIdx, lastPlayEventIdx)
 
@@ -84,10 +85,10 @@ func (t *TrackedGame) GetViolations(db *sql.DB) [][2]string {
 
 			switch p.Details.Call.Code {
 			case "AC":
-				n := buildNotification(db, "B", v, p, t.Game.GameData.Teams)
+				n := buildNotification(db, "B", v, p, t.Game.GameData.Teams, t.Game.GameData.Datetime.OfficialDate)
 				notifications = append(notifications, n)
 			case "VP":
-				n := buildNotification(db, "P", v, p, t.Game.GameData.Teams)
+				n := buildNotification(db, "P", v, p, t.Game.GameData.Teams, t.Game.GameData.Datetime.OfficialDate)
 				notifications = append(notifications, n)
 			}
 
@@ -95,15 +96,14 @@ func (t *TrackedGame) GetViolations(db *sql.DB) [][2]string {
 		}
 
 		t.LastPlayIdx = int32(pIdx)
-
 	}
-	fmt.Printf("Setting Last Played to: %d-%d", t.LastPlayIdx, t.LastPlayEventIdx)
+	// fmt.Printf("Setting Last Played to: %d-%d", t.LastPlayIdx, t.LastPlayEventIdx)
 
 	// fmt.Printf("L: %d\n", t.LastPlayIdx)
 	return notifications
 }
 
-func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTeams) Tweet {
+func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTeams, date string) Tweet {
 	var a string
 	var t string
 	var tweet Tweet
@@ -136,8 +136,10 @@ func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTea
 			teamAbbr = awayAbbr
 		}
 	}
-	tt, ttt, pt := saveViolation(db, a, player, t)
+	tt, ttt, pt, ptt := saveViolation(db, a, player, t, date)
 	thead := fmt.Sprintf("Pitch Clock Violation on %s", a)
+
+	fmt.Printf("%s: %d, %d, %d, %d\n", player.FullName, tt, ttt, pt, ptt)
 
 	o := "Out"
 
@@ -147,53 +149,79 @@ func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTea
 
 	tweet.MainTweet = fmt.Sprintf(`%v\n%v (%v)\n%v %v - %v @ %v\nCount Now %v - %v, %v %v`, thead, player.FullName, t, p.About.HalfInning, p.About.Inning, awayTeam, homeTeam, e.Count.Balls, e.Count.Strikes, e.Count.Outs, o)
 
+	// move to a function
 	pluralization := "'"
 	if player.FullName[len(player.FullName)-1:] != "s" {
 		pluralization = fmt.Sprintf(`%ss`, pluralization)
 	}
 
-	if p.About.HalfInning == "top" {
-		teamAbbr = teams.Home.ClubName
-	} else {
-		teamAbbr = homeTeam
+	suffix := getOrdinalSuffix(pt)
+
+	var dailyNote string
+	if ptt > 1 {
+		dailyNote = fmt.Sprintf(" (%d%s today)", ptt, getOrdinalSuffix(ptt))
+		fmt.Printf("DAILY NOTE!!\n%s\n", dailyNote)
 	}
 
-	tweet.ReplyTweet = fmt.Sprintf(`That's %s%s %d%s violation this season. As a team the %s have %d violations this year (%d %s violations)`, player.FullName, pluralization, pt, "th", teamAbbr, tt, ttt, strings.ToLower(a))
+	tweet.ReplyTweet = fmt.Sprintf(`That's %s%s %d%s violation this season%s. As a team the %s have %d violations this year (%d %s violations)`, player.FullName, pluralization, pt, suffix, dailyNote, teamAbbr, tt, ttt, strings.ToLower(a))
 
 	return tweet
 }
 
-func saveViolation(db *sql.DB, code string, p Player, team string) (int, int, int) {
-	stmt, err := db.Prepare("INSERT INTO player_stats(player_id, player_name, team_name, code, date) VALUES(?, ?, ?, ?, NOW())")
+func getOrdinalSuffix(i int) string {
+	j := i % 10
+	k := i % 100
+	if j == 1 && k != 11 {
+		return "st"
+	}
+	if j == 2 && k != 12 {
+		return "nd"
+	}
+	if j == 3 && k != 13 {
+		return "rd"
+	}
+	return "th"
+}
+
+func saveViolation(db *sql.DB, code string, p Player, team string, date string) (int, int, int, int) {
+	table := os.Getenv("DB_TABLE")
+	stmt, err := db.Prepare(fmt.Sprintf("INSERT INTO %s(player_id, player_name, team_name, code, date) VALUES(?, ?, ?, ?, ?)", table))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = stmt.Exec(p.ID, p.FullName, team, code)
+	_, err = stmt.Exec(p.ID, p.FullName, team, code, date)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// grab the teams total
 	var teamTotal int
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats WHERE team_name = '%s'", team)).Scan(&teamTotal)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE team_name = '%s'", table, team)).Scan(&teamTotal)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// grab the team total for the given code
 	var teamTotalType int
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats WHERE team_name = '%s' AND code = '%s'", team, code)).Scan(&teamTotalType)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE team_name = '%s' AND code = '%s'", table, team, code)).Scan(&teamTotalType)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// grab the player's total
 	var playerTotal int
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats WHERE player_id = '%d'", p.ID)).Scan(&playerTotal)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE player_id = %d", table, p.ID)).Scan(&playerTotal)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return teamTotal, teamTotalType, playerTotal
+	// grab the player's total today
+	var playerTotalToday int
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE player_id = %d AND date = '%s'", table, p.ID, date)).Scan(&playerTotalToday)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return teamTotal, teamTotalType, playerTotal, playerTotalToday
 }
