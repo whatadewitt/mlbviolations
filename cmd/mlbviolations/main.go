@@ -117,7 +117,7 @@ func main() {
 	defer db.Close()
 
 	gameDay := time.Now()
-	gameDay = gameDay.AddDate(0, 0, -1)
+	// gameDay = gameDay.AddDate(0, 0, -1)
 
 	var trackedGames []*internal.TrackedGame
 	for {
