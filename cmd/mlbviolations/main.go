@@ -23,13 +23,13 @@ var total int = 0
 // tweet the data out
 func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
 	if reply_id == "" {
-		fmt.Printf("\n\nTWEETING:\n%s\n", v.MainTweet)
+		fmt.Printf("TWEETING:\n%s\n", v.MainTweet)
 	} else {
-		fmt.Printf("\n\nTWEETING:\n%s\n", v.ReplyTweet)
+		fmt.Printf("TWEETING:\n%s\n", v.ReplyTweet)
 	}
 
 	if os.Getenv("TWITTER_API_KEY") == "" {
-		fmt.Printf("\n\nTWEETING:\n%s\n", v.ReplyTweet)
+		fmt.Printf("TWEETING:\n%s\n", v.ReplyTweet)
 		return nil, nil
 	}
 
@@ -41,10 +41,8 @@ func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
 
 	var payload *strings.Reader
 	if reply_id == "" {
-		fmt.Println("SENDING TWEET")
 		payload = strings.NewReader(fmt.Sprintf(`{ "text": "%s" }`, v.MainTweet))
 	} else {
-		fmt.Println("SENDING RESPONSE")
 		payload = strings.NewReader(fmt.Sprintf(`{ "text": "%s", "reply": { "in_reply_to_tweet_id": "%s" } }`, v.ReplyTweet, reply_id))
 	}
 
@@ -67,7 +65,7 @@ func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
 	if v.ReplyTweet != "" && randy <= .25 && reply_id == "" {
 		// send a reply with additional data 25% of the time
 		// but not to the replies...
-		fmt.Println("I'm sending a response!")
+		fmt.Println("Will send follow up!")
 
 		var tweetResp internal.TweetResponse
 		err = json.Unmarshal(body, &tweetResp)
@@ -79,7 +77,7 @@ func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
 
 		return tweet(v, tweetResp.Data.Id)
 	} else {
-		return nil, nil // body, nil
+		return body, nil // body, nil
 	}
 }
 
@@ -119,7 +117,7 @@ func main() {
 	defer db.Close()
 
 	gameDay := time.Now()
-	// gameDay = gameDay.AddDate(0, 0, -1)
+	gameDay = gameDay.AddDate(0, 0, -1)
 
 	var trackedGames []*internal.TrackedGame
 	for {
