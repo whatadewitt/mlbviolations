@@ -1,16 +1,19 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/dghubble/oauth1"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 	"github.com/whatadewitt/mlbviolations/internal"
 )
@@ -18,16 +21,30 @@ import (
 var total int = 0
 
 // tweet the data out
-func tweet(s string) ([]byte, error) {
-	fmt.Printf("\n\nTWEETING:\n%v\n", s)
-	// return nil, nil
+func tweet(v internal.Tweet, reply_id string) ([]byte, error) {
+	if reply_id == "" {
+		fmt.Printf("TWEETING:\n%s\n", v.MainTweet)
+	} else {
+		fmt.Printf("TWEETING:\n%s\n", v.ReplyTweet)
+	}
+
+	if os.Getenv("TWITTER_API_KEY") == "" {
+		fmt.Printf("TWEETING:\n%s\n", v.ReplyTweet)
+		return nil, nil
+	}
+
 	config := oauth1.NewConfig(os.Getenv("TWITTER_API_KEY"), os.Getenv("TWITTER_API_SECRET"))
 	token := oauth1.NewToken(os.Getenv("TWITTER_ACCESS_TOKEN"), os.Getenv("TWITTER_ACCESS_TOKEN_SECRET"))
 	httpClient := config.Client(oauth1.NoContext, token)
 
 	twitterUrl := "https://api.twitter.com/2/tweets"
 
-	payload := strings.NewReader(fmt.Sprintf(`{ "text": "%v" }`, s))
+	var payload *strings.Reader
+	if reply_id == "" {
+		payload = strings.NewReader(fmt.Sprintf(`{ "text": "%s" }`, v.MainTweet))
+	} else {
+		payload = strings.NewReader(fmt.Sprintf(`{ "text": "%s", "reply": { "in_reply_to_tweet_id": "%s" } }`, v.ReplyTweet, reply_id))
+	}
 
 	res, err := httpClient.Post(twitterUrl, "application/json", payload)
 	if err != nil {
@@ -42,8 +59,26 @@ func tweet(s string) ([]byte, error) {
 		return nil, err
 	}
 
-	fmt.Println(string(body))
-	return body, nil
+	fmt.Println("payload %v", payload)
+
+	randy := rand.Float32()
+	if v.ReplyTweet != "" && randy <= .25 && reply_id == "" {
+		// send a reply with additional data 25% of the time
+		// but not to the replies...
+		fmt.Println("Will send follow up!")
+
+		var tweetResp internal.TweetResponse
+		err = json.Unmarshal(body, &tweetResp)
+
+		if err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
+
+		return tweet(v, tweetResp.Data.Id)
+	} else {
+		return body, nil // body, nil
+	}
 }
 
 // parse a scoreboard for gamePks
@@ -72,22 +107,39 @@ func parseScoreboardData(gameDay time.Time) ([]*internal.TrackedGame, error) {
 func main() {
 	godotenv.Load()
 
+	db, err := sql.Open("mysql",
+		fmt.Sprintf("%v:%v@tcp(%v:%v)/%v", os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_DATABASE")))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
 	gameDay := time.Now()
 	// gameDay = gameDay.AddDate(0, 0, -1)
-	trackedGames, err := parseScoreboardData(gameDay)
-	if err != nil {
-		fmt.Printf("Error getting games for day %v", gameDay.Format("Mon Jan 02 2006"))
-		log.Fatal(err)
+
+	var trackedGames []*internal.TrackedGame
+	for {
+		trackedGames, err = parseScoreboardData(gameDay)
+		if err != nil {
+			fmt.Printf("Error getting games for day %v", gameDay.Format("Mon Jan 02 2006"))
+			fmt.Println("\ntrying again in 5 seconds...")
+			time.Sleep(5 * time.Second)
+		} else {
+			break
+		}
 	}
 
 	games := make([]*internal.TrackedGame, 0)
 	upcomingGames := make([]*internal.TrackedGame, 0)
 
 	for _, game := range trackedGames {
-		// if (game.Status.AbstractGameCode == "F" && game.Status.DetailedState == "Postponed") {
-		// F here to handle games that have finished
-		// (or been delayed today) -- figure it out
-		if game.GameDate.Before(time.Now()) {
+		if game.Status.AbstractGameCode == "F" && game.Status.DetailedState == "Postponed" {
+			// F here to handle games that have finished
+			// (or been delayed today) -- figure it out
+			// we basically just skip here for now
+		} else if game.GameDate.Before(time.Now()) {
 			// game has started
 			games = append(games, game)
 		} else {
@@ -117,13 +169,13 @@ func main() {
 
 		for _, game := range games {
 			game.Refresh()
-			violations := game.GetViolations()
+			violations := game.GetViolations(db)
 
 			if len(violations) > 0 {
 				game.ViolationsTotal += int32(len(violations))
 				for _, v := range violations {
 					total++
-					tweet(fmt.Sprintf(`%v\n%d in game, %d total in todays games.`, v, game.ViolationsTotal, total))
+					tweet(v, "")
 				}
 			}
 
@@ -139,7 +191,22 @@ func main() {
 
 		fmt.Printf("left to count... %d", gameCount)
 		if gameCount == 0 {
-			tweet(fmt.Sprintf(`That's all for today folks!\nTotal Violations: %d`, total))
+			seasonTotal, err := getViolationCount(db)
+
+			if err != nil {
+				fmt.Println("Error getting violation count.")
+				log.Fatal(err)
+			}
+
+			var signOffTweet internal.Tweet
+			signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d`, total, seasonTotal)
+			tweet(signOffTweet, "")
+			os.Exit(3)
+		}
+
+		// quit if between 7 and 8 am
+		if shouldShutDown() {
+			fmt.Println("Shutting down as there's gotta be something wrong...")
 			os.Exit(3)
 		}
 
@@ -154,4 +221,20 @@ func main() {
 			time.Sleep(time.Second * 50)
 		}
 	}
+}
+
+func shouldShutDown() bool {
+	hour, _, _ := time.Now().Clock()
+	return hour >= 7 && hour <= 8
+}
+
+func getViolationCount(db *sql.DB) (int, error) {
+	var seasonTotal int
+	err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats")).Scan(&seasonTotal)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return seasonTotal, nil
 }
