@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -62,8 +63,8 @@ func (t *TrackedGame) Refresh() {
 
 func (t *TrackedGame) GetViolations(db *sql.DB) []Tweet {
 	// Request the data, and return just the violations.
-	lastPlayIdx := t.LastPlayIdx
-	lastPlayEventIdx := t.LastPlayEventIdx
+	lastPlayIdx := 0      //t.LastPlayIdx
+	lastPlayEventIdx := 0 // t.LastPlayEventIdx
 
 	notifications := []Tweet{}
 
@@ -83,13 +84,25 @@ func (t *TrackedGame) GetViolations(db *sql.DB) []Tweet {
 			}
 			// fmt.Printf("ie: %d-%d\n", pIdx, eIdx)
 
+			playId := fmt.Sprintf("00%d", pIdx)
+			eventId := fmt.Sprintf("0%d", eIdx)
+
+			id := fmt.Sprintf("%d%s%s", t.Game.GamePk, playId[len(playId)-3:], eventId[len(eventId)-2:])
+
 			switch p.Details.Call.Code {
 			case "AC":
-				n := buildNotification(db, "B", v, p, t.Game.GameData.Teams, t.Game.GameData.Datetime.OfficialDate)
-				notifications = append(notifications, n)
+				n := buildNotification(db, "B", v, p, t.Game.GameData.Teams, t.Game.GameData.Datetime.OfficialDate, id)
+
+				if n.MainTweet != "" {
+					notifications = append(notifications, n)
+				}
+
 			case "VP":
-				n := buildNotification(db, "P", v, p, t.Game.GameData.Teams, t.Game.GameData.Datetime.OfficialDate)
-				notifications = append(notifications, n)
+				n := buildNotification(db, "P", v, p, t.Game.GameData.Teams, t.Game.GameData.Datetime.OfficialDate, id)
+
+				if n.MainTweet != "" {
+					notifications = append(notifications, n)
+				}
 			}
 
 			t.LastPlayEventIdx = int32(eIdx)
@@ -103,7 +116,7 @@ func (t *TrackedGame) GetViolations(db *sql.DB) []Tweet {
 	return notifications
 }
 
-func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTeams, date string) Tweet {
+func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTeams, date string, id string) Tweet {
 	var a string
 	var t string
 	var tweet Tweet
@@ -136,18 +149,38 @@ func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTea
 			teamAbbr = awayAbbr
 		}
 	}
-	tt, ttt, pt, ptt := saveViolation(db, a, player, t, date)
+	tt, ttt, pt, ptt := saveViolation(db, a, player, t, date, id)
+
+	if tt < 0 {
+		return tweet
+	}
+
 	thead := fmt.Sprintf("Pitch Clock Violation on %s", a)
 
 	fmt.Printf("%s: %d, %d, %d, %d\n", player.FullName, tt, ttt, pt, ptt)
 
 	o := "Out"
 
-	if p.Count.Outs > 1 {
+	// TODO: if strikeout or walk, report it
+	countString := fmt.Sprintf("Count Now %v - %v,", e.Count.Balls, e.Count.Strikes)
+	upOuts := false
+	if e.Count.Balls == 4 {
+		countString = `That's a walk on a violation!\n`
+	} else if e.Count.Strikes == 3 {
+		countString = `That's a strikeout on a violation!\n`
+		upOuts = !upOuts
+	}
+
+	outsCount := e.Count.Outs
+	if upOuts {
+		outsCount++
+	}
+
+	if outsCount != 1 {
 		o = o + "s"
 	}
 
-	tweet.MainTweet = fmt.Sprintf(`%v\n%v (%v)\n%v %v - %v @ %v\nCount Now %v - %v, %v %v`, thead, player.FullName, t, p.About.HalfInning, p.About.Inning, awayTeam, homeTeam, e.Count.Balls, e.Count.Strikes, e.Count.Outs, o)
+	tweet.MainTweet = fmt.Sprintf(`%v\n%v (%v)\n%v %v - %v @ %v\n%s%v %v`, thead, player.FullName, t, p.About.HalfInning, p.About.Inning, awayTeam, homeTeam, countString, outsCount, o)
 
 	// move to a function
 	pluralization := "'"
@@ -183,16 +216,21 @@ func getOrdinalSuffix(i int) string {
 	return "th"
 }
 
-func saveViolation(db *sql.DB, code string, p Player, team string, date string) (int, int, int, int) {
+func saveViolation(db *sql.DB, code string, p Player, team string, date string, id string) (int, int, int, int) {
 	table := os.Getenv("DB_TABLE")
-	stmt, err := db.Prepare(fmt.Sprintf("INSERT INTO %s(player_id, player_name, team_name, code, date) VALUES(?, ?, ?, ?, ?)", table))
+	stmt, err := db.Prepare(fmt.Sprintf("INSERT INTO %s(id, player_id, player_name, team_name, code, date) VALUES(?, ?, ?, ?, ?, ?)", table))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = stmt.Exec(p.ID, p.FullName, team, code, date)
+	vioId, err := strconv.Atoi(id)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	_, err = stmt.Exec(vioId, p.ID, p.FullName, team, code, date)
+	if err != nil {
+		return -1, -1, -1, -1
 	}
 
 	// grab the teams total

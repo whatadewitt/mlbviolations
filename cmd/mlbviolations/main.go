@@ -204,6 +204,12 @@ func main() {
 			os.Exit(3)
 		}
 
+		// quit if between 7 and 8 am
+		if shouldShutDown() {
+			fmt.Println("Shutting down as there's gotta be something wrong...")
+			os.Exit(3)
+		}
+
 		fmt.Printf("checking %d games...\n", len(games))
 
 		if len(games) == 0 && len(upcomingGames) > 0 {
@@ -215,6 +221,11 @@ func main() {
 			time.Sleep(time.Second * 50)
 		}
 	}
+}
+
+func shouldShutDown() bool {
+	hour, _, _ := time.Now().Clock()
+	return hour >= 7 && hour <= 8
 }
 
 func getViolationCount(db *sql.DB) (int, error) {
