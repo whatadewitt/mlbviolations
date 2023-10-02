@@ -134,6 +134,13 @@ func main() {
 	games := make([]*internal.TrackedGame, 0)
 	upcomingGames := make([]*internal.TrackedGame, 0)
 
+	// if len(games) == 0 && len(upcomingGames) == 0 {
+	// 	var noGamesTweet internal.Tweet
+	// 	noGamesTweet.MainTweet = "No games today! Enjoy the silence!"
+	// 	tweet(noGamesTweet, "")
+	// 	os.Exit(3)
+	// }
+
 	for _, game := range trackedGames {
 		if game.Status.AbstractGameCode == "F" && game.Status.DetailedState == "Postponed" {
 			// F here to handle games that have finished
@@ -199,7 +206,11 @@ func main() {
 			}
 
 			var signOffTweet internal.Tweet
-			signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d`, total, seasonTotal)
+			if total == 0 {
+				signOffTweet.MainTweet = fmt.Sprintf(`Whoa! No violations today!\nSeason Total: %d`, seasonTotal)
+			} else {
+				signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d`, total, seasonTotal)
+			}
 			tweet(signOffTweet, "")
 			os.Exit(3)
 		}

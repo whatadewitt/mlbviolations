@@ -162,7 +162,7 @@ func buildNotification(db *sql.DB, vt string, p Play, e PlayEvent, teams GameTea
 	o := "Out"
 
 	// TODO: if strikeout or walk, report it
-	countString := fmt.Sprintf("Count Now %v - %v,", e.Count.Balls, e.Count.Strikes)
+	countString := fmt.Sprintf("Count Now %v - %v, ", e.Count.Balls, e.Count.Strikes)
 	upOuts := false
 	if e.Count.Balls == 4 {
 		countString = `That's a walk on a violation!\n`
