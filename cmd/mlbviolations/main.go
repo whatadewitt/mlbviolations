@@ -199,6 +199,7 @@ func main() {
 		fmt.Printf("left to count... %d", gameCount)
 		if gameCount == 0 {
 			seasonTotal, err := getViolationCount(db)
+			postseasonTotal, err := getPostseasonViolationCount(db)
 
 			if err != nil {
 				fmt.Println("Error getting violation count.")
@@ -207,9 +208,9 @@ func main() {
 
 			var signOffTweet internal.Tweet
 			if total == 0 {
-				signOffTweet.MainTweet = fmt.Sprintf(`Whoa! No violations today!\nSeason Total: %d`, seasonTotal)
+				signOffTweet.MainTweet = fmt.Sprintf(`Whoa! No violations today!\nSeason Total: %d\nPostseason Total: %d`, seasonTotal, postseasonTotal)
 			} else {
-				signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d`, total, seasonTotal)
+				signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d\nPostseason Total: %d`, total, seasonTotal, postseasonTotal)
 			}
 			tweet(signOffTweet, "")
 			os.Exit(3)
@@ -248,4 +249,15 @@ func getViolationCount(db *sql.DB) (int, error) {
 	}
 
 	return seasonTotal, nil
+}
+
+func getPostseasonViolationCount(db *sql.DB) (int, error) {
+	var postseasonTotal int
+	err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats WHERE date > '2023-10-01'")).Scan(&postseasonTotal)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return postseasonTotal, nil
 }
