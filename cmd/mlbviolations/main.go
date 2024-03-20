@@ -142,10 +142,11 @@ func main() {
 	// }
 
 	for _, game := range trackedGames {
-		if game.Status.AbstractGameCode == "F" && game.Status.DetailedState == "Postponed" {
+		if (game.Status.AbstractGameCode == "F" && game.Status.DetailedState == "Postponed") || game.GameType == "S" {
 			// F here to handle games that have finished
 			// (or been delayed today) -- figure it out
 			// we basically just skip here for now
+			// S is to skip spring training...
 		} else if game.GameDate.Before(time.Now()) {
 			// game has started
 			games = append(games, game)
@@ -199,7 +200,7 @@ func main() {
 		fmt.Printf("left to count... %d", gameCount)
 		if gameCount == 0 {
 			seasonTotal, err := getViolationCount(db)
-			postseasonTotal, err := getPostseasonViolationCount(db)
+			// postseasonTotal, err := getPostseasonViolationCount(db)
 
 			if err != nil {
 				fmt.Println("Error getting violation count.")
@@ -208,9 +209,9 @@ func main() {
 
 			var signOffTweet internal.Tweet
 			if total == 0 {
-				signOffTweet.MainTweet = fmt.Sprintf(`Whoa! No violations today!\nSeason Total: %d\nPostseason Total: %d`, seasonTotal, postseasonTotal)
+				signOffTweet.MainTweet = fmt.Sprintf(`Whoa! No violations today!\nSeason Total: %d`, seasonTotal) //\nPostseason Total: %d`, seasonTotal, postseasonTotal)
 			} else {
-				signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d\nPostseason Total: %d`, total, seasonTotal, postseasonTotal)
+				signOffTweet.MainTweet = fmt.Sprintf(`That's all for today folks!\nTotal Violations Today: %d\nSeason Total: %d`, total, seasonTotal) //\nPostseason Total: %d`, total, seasonTotal, postseasonTotal)
 			}
 			tweet(signOffTweet, "")
 			os.Exit(3)
@@ -242,7 +243,7 @@ func shouldShutDown() bool {
 
 func getViolationCount(db *sql.DB) (int, error) {
 	var seasonTotal int
-	err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats")).Scan(&seasonTotal)
+	err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM player_stats WHERE date > '2024-01-01'")).Scan(&seasonTotal)
 
 	if err != nil {
 		return 0, err

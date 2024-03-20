@@ -25,6 +25,7 @@ type TrackedGame struct {
 	Game             *GameData  `json:"game_data,omitempty"`
 	Status           GameStatus `json:"status,omitempty"`
 	ViolationsTotal  int32      `json:"violationsTotal,omitempty"`
+	GameType         string     `json:"gameType,omitempty"`
 	LastPlayIdx      int32      `json:"lastPlayIdx,omitempty"`
 	LastPlayEventIdx int32      `json:"lastPlayEventIdx,omitempty"`
 }
@@ -235,28 +236,28 @@ func saveViolation(db *sql.DB, code string, p Player, team string, date string, 
 
 	// grab the teams total
 	var teamTotal int
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE team_name = '%s'", table, team)).Scan(&teamTotal)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE team_name = '%s' AND date > '2024-01-01'", table, team)).Scan(&teamTotal)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// grab the team total for the given code
 	var teamTotalType int
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE team_name = '%s' AND code = '%s'", table, team, code)).Scan(&teamTotalType)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE team_name = '%s' AND code = '%s' AND date > '2024-01-01'", table, team, code)).Scan(&teamTotalType)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// grab the player's total
 	var playerTotal int
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE player_id = %d", table, p.ID)).Scan(&playerTotal)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE player_id = %d AND date > '2024-01-01'", table, p.ID)).Scan(&playerTotal)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// grab the player's total today
 	var playerTotalToday int
-	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE player_id = %d AND date = '%s'", table, p.ID, date)).Scan(&playerTotalToday)
+	err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE player_id = %d AND date = '%s' AND date > '2024-01-01'", table, p.ID, date)).Scan(&playerTotalToday)
 	if err != nil {
 		log.Fatal(err)
 	}
